@@ -7,15 +7,19 @@ const wss = new WebSocket.Server({ server });
 
 const coinCapWs = new WebSocket('wss://ws.coincap.io/prices?assets=bitcoin');
 const histData = [];
+const logInterval = 5; // s
+const logMaxTime = 3600; // s
 let savedTimestamp = 0;
 
-// Save historical data for 1 day, logged every minute
+
+// Save historical data
 coinCapWs.on('message', message => {
     message = JSON.parse(message);
     message.timestamp = Date.now();
-    if (message.timestamp - savedTimestamp >= 60000) {
+    message.bitcoin = parseFloat(message.bitcoin).toFixed(2);
+    if (message.timestamp - savedTimestamp >= logInterval * 1000) {
         histData.push(message);
-        if (histData.length > 1440) {
+        if (histData.length > logMaxTime / logInterval) {
             histData.shift();
         }
         savedTimestamp = message.timestamp;
@@ -28,6 +32,7 @@ wss.on('connection', ws => {
     coinCapWs.on('message', message => {
         message = JSON.parse(message);
         message.timestamp = Date.now();
+        message.bitcoin = parseFloat(message.bitcoin).toFixed(2);
         ws.send(JSON.stringify({ rtData: message }));
     });
 });
