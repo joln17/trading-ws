@@ -12,6 +12,7 @@ const interval = 10; // s
 const maxTime = 3600; // s
 
 const histData = {};
+const currentData = {};
 
 for (const asset of assets) {
     histData[asset] = [];
@@ -29,6 +30,8 @@ coinCapWs.on('message', message => {
         histData[asset][histData[asset].length - 1].timestamp :
         0;
 
+    currentData[asset] = newData;
+
     if (newData.timestamp - savedTimestamp >= interval * 1000) {
         histData[asset].push(newData);
         if (message.timestamp - histData[asset][0] > maxTime * 1000) {
@@ -40,7 +43,9 @@ coinCapWs.on('message', message => {
 
 wss.on('connection', ws => {
     ws.on('message', message => {
-        if (assets.includes(message)) {
+        if (message === 'getCurrentData') {
+            ws.send(JSON.stringify({ currentData: currentData }));
+        } else if (assets.includes(message)) {
             const histDataAsset = {
                 asset: message,
                 data: histData[message]
@@ -49,6 +54,7 @@ wss.on('connection', ws => {
             ws.send(JSON.stringify({ histData: histDataAsset }));
         }
     });
+
     coinCapWs.on('message', message => {
         message = JSON.parse(message);
         const asset = Object.keys(message)[0];
