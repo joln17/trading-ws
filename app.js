@@ -5,16 +5,17 @@ const WebSocket = require('ws');
 const server = require('http').createServer(app);
 const wss = new WebSocket.Server({ server });
 
-const assets = 'bitcoin,ethereum,litecoin';
-const coinCapWs = new WebSocket('wss://ws.coincap.io/prices?assets=' + assets);
-const histData = {
-    bitcoin: [],
-    ethereum: [],
-    litecoin: [],
-    ripple: []
-};
+const assets = ['bitcoin', 'ethereum', 'litecoin'];
+const coinCapWs = new WebSocket('wss://ws.coincap.io/prices?assets=' + assets.join());
+
 const interval = 10; // s
 const maxTime = 3600; // s
+
+const histData = {};
+
+for (const asset of assets) {
+    histData[asset] = [];
+}
 
 // Save historical data
 coinCapWs.on('message', message => {
@@ -39,11 +40,10 @@ coinCapWs.on('message', message => {
 
 wss.on('connection', ws => {
     ws.on('message', message => {
-        if (message === 'getHistory') {
-            const asset = 'bitcoin';
+        if (assets.includes(message)) {
             const histDataAsset = {
-                asset: asset,
-                data: histData[asset]
+                asset: message,
+                data: histData[message]
             };
 
             ws.send(JSON.stringify({ histData: histDataAsset }));
