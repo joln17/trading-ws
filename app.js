@@ -12,7 +12,7 @@ const interval = 10; // s
 const maxTime = 3600; // s
 
 const histData = {};
-const currentData = {};
+const currentData = { timestamp: 0, price: {} };
 
 for (const asset of assets) {
     histData[asset] = [];
@@ -26,11 +26,22 @@ coinCapWs.on('message', message => {
         value: parseFloat(message[asset]).toFixed(2),
         timestamp: Date.now()
     };
+    const rtDataAsset = {
+        asset: asset,
+        data: newData
+    };
     const savedTimestamp = histData[asset].length > 0 ?
         histData[asset][histData[asset].length - 1].timestamp :
         0;
 
-    currentData[asset] = newData;
+    wss.clients.forEach(client => {
+        if (client.readyState === WebSocket.OPEN) {
+            client.send(JSON.stringify({ rtData: rtDataAsset }));
+        }
+    });
+
+    currentData.price[asset] = newData.value;
+    currentData.timestamp = newData.timestamp;
 
     if (newData.timestamp - savedTimestamp >= interval * 1000) {
         histData[asset].push(newData);
@@ -40,6 +51,11 @@ coinCapWs.on('message', message => {
         console.log(asset, ': ', JSON.stringify(newData));
     }
 });
+
+coinCapWs.onclose = () => {
+    console.log('Disconnected.');
+    // automatically try to reconnect on connection loss
+};
 
 wss.on('connection', ws => {
     ws.on('message', message => {
@@ -53,21 +69,6 @@ wss.on('connection', ws => {
 
             ws.send(JSON.stringify({ histData: histDataAsset }));
         }
-    });
-
-    coinCapWs.on('message', message => {
-        message = JSON.parse(message);
-        const asset = Object.keys(message)[0];
-        const newData = {
-            value: parseFloat(message[asset]).toFixed(2),
-            timestamp: Date.now()
-        };
-        const rtDataAsset = {
-            asset: asset,
-            data: newData
-        };
-
-        ws.send(JSON.stringify({ rtData: rtDataAsset }));
     });
 });
 
