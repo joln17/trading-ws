@@ -18,7 +18,6 @@ for (const asset of assets) {
     histData[asset] = [];
 }
 
-// Save historical data
 coinCapWs.on('message', message => {
     message = JSON.parse(message);
     const asset = Object.keys(message)[0];
@@ -30,25 +29,30 @@ coinCapWs.on('message', message => {
         asset: asset,
         data: newData
     };
-    const savedTimestamp = histData[asset].length > 0 ?
-        histData[asset][histData[asset].length - 1].timestamp :
-        0;
 
+    // Send real-time data
     wss.clients.forEach(client => {
         if (client.readyState === WebSocket.OPEN) {
             client.send(JSON.stringify({ rtData: rtDataAsset }));
         }
     });
 
+    // Save current data
     currentData.price[asset] = newData.value;
     currentData.timestamp = newData.timestamp;
 
-    if (newData.timestamp - savedTimestamp >= interval * 1000) {
-        histData[asset].push(newData);
-        if (message.timestamp - histData[asset][0] > maxTime * 1000) {
-            histData[asset].shift();
-        }
-        console.log(asset, ': ', JSON.stringify(newData));
+    const lastTS = histData[asset].length > 0 ?
+        histData[asset][histData[asset].length - 1].timestamp :
+        0;
+
+    // Save historical data
+    if (newData.timestamp - lastTS >= interval * 1000) {
+        const firstTS = histData[asset].length > 0 ?
+            histData[asset][0].timestamp :
+            0;
+        const index = newData.timestamp - firstTS >= maxTime * 1000 ? 1 : 0;
+
+        histData[asset] = [...histData[asset].slice(index), newData];
     }
 });
 
