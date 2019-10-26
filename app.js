@@ -3,7 +3,15 @@ const app = express();
 const WebSocket = require('ws');
 
 const server = require('http').createServer(app);
-const wss = new WebSocket.Server({ server });
+const wss = new WebSocket.Server({
+    verifyClient(info) {
+        if (info.origin !== 'https://trading.joln17.me') {
+            return false;
+        }
+        return true;
+    },
+    server
+});
 
 const assets = ['bitcoin', 'ethereum', 'litecoin'];
 const coinCapWs = new WebSocket('wss://ws.coincap.io/prices?assets=' + assets.join());
