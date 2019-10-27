@@ -14,7 +14,8 @@ const wss = new WebSocket.Server({
 });
 
 const assets = ['bitcoin', 'ethereum', 'litecoin'];
-const coinCapWs = new WebSocket('wss://ws.coincap.io/prices?assets=' + assets.join());
+let coinCapWs = new WebSocket('wss://ws.coincap.io/prices?assets=' + assets.join());
+let timeout = 10000;
 
 const interval = 10; // s
 const maxTime = 3600; // s
@@ -25,6 +26,17 @@ const currentData = { timestamp: 0, price: {} };
 for (const asset of assets) {
     histData[asset] = [];
 }
+
+function reconnect() {
+    if (coinCapWs.readyState === WebSocket.CLOSED) {
+        coinCapWs = new WebSocket('wss://ws.coincap.io/prices?assets=' + assets.join());
+    }
+}
+
+coinCapWs.on('open', () => {
+    console.log('Connected.');
+    timeout = 10000;
+});
 
 coinCapWs.on('message', message => {
     message = JSON.parse(message);
@@ -64,10 +76,11 @@ coinCapWs.on('message', message => {
     }
 });
 
-coinCapWs.onclose = () => {
+coinCapWs.on('close', () => {
     console.log('Disconnected.');
-    // automatically try to reconnect on connection loss
-};
+    setTimeout(reconnect, timeout);
+    timeout += timeout;
+});
 
 wss.on('connection', ws => {
     ws.on('message', message => {
