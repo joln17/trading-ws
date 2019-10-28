@@ -76,6 +76,11 @@ coinCapWs.on('message', message => {
     }
 });
 
+coinCapWs.on('error', () => {
+    console.log('Error.');
+    coinCapWs.close();
+});
+
 coinCapWs.on('close', () => {
     console.log('Disconnected.');
     setTimeout(reconnect, timeout);
