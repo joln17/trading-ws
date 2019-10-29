@@ -15,7 +15,7 @@ const wss = new WebSocket.Server({
 
 const assets = ['bitcoin', 'ethereum', 'litecoin'];
 const coinCapUrl = 'wss://ws.coincap.io/prices?assets=' + assets.join();
-let coinCapWs = new WebSocket(coinCapUrl);
+let coinCapWs;
 let timeout = 10000;
 
 const interval = 10; // s
@@ -28,68 +28,69 @@ for (const asset of assets) {
     histData[asset] = [];
 }
 
-// Try to reconnect when coincap WS is closed
-function reconnect() {
-    if (coinCapWs.readyState === WebSocket.CLOSED) {
-        coinCapWs = new WebSocket(coinCapUrl);
-    }
-}
 
-coinCapWs.on('open', () => {
-    console.log('Connected.');
-    timeout = 10000;
-});
+function connect() {
+    coinCapWs = new WebSocket(coinCapUrl);
 
-coinCapWs.on('message', message => {
-    message = JSON.parse(message);
-    const asset = Object.keys(message)[0];
-    const newData = {
-        value: parseFloat(message[asset]).toFixed(2),
-        timestamp: Date.now()
-    };
-    const rtDataAsset = {
-        asset: asset,
-        data: newData
-    };
+    coinCapWs.on('open', () => {
+        console.log('Connected.');
+        timeout = 10000;
+    });
 
-    // Send real-time data to clients
-    wss.clients.forEach(client => {
-        if (client.readyState === WebSocket.OPEN) {
-            client.send(JSON.stringify({ rtData: rtDataAsset }));
+    // Close coincap WS on error
+    coinCapWs.on('error', () => {
+        console.log('Error.');
+        if (coinCapWs.readyState !== WebSocket.CLOSED) {
+            coinCapWs.close();
         }
     });
 
-    // Save current data
-    currentData.price[asset] = newData.value;
-    currentData.timestamp = newData.timestamp;
+    // Try to reconnect with an incremental time intervall
+    coinCapWs.on('close', () => {
+        console.log('Disconnected.');
+        setTimeout(connect, timeout);
+        timeout += timeout;
+    });
 
-    const lastTS = histData[asset].length > 0 ?
-        histData[asset][histData[asset].length - 1].timestamp :
-        0;
+    // Forward message from coincap WS to all clients and save to histData and currentData
+    coinCapWs.on('message', message => {
+        message = JSON.parse(message);
+        const asset = Object.keys(message)[0];
+        const newData = {
+            value: parseFloat(message[asset]).toFixed(2),
+            timestamp: Date.now()
+        };
+        const rtDataAsset = {
+            asset: asset,
+            data: newData
+        };
 
-    // Save historical data
-    if (newData.timestamp - lastTS >= interval * 1000) {
-        const firstTS = histData[asset].length > 0 ?
-            histData[asset][0].timestamp :
+        // Send real-time data to clients
+        wss.clients.forEach(client => {
+            if (client.readyState === WebSocket.OPEN) {
+                client.send(JSON.stringify({ rtData: rtDataAsset }));
+            }
+        });
+
+        // Save current data
+        currentData.price[asset] = newData.value;
+        currentData.timestamp = newData.timestamp;
+
+        const lastTS = histData[asset].length > 0 ?
+            histData[asset][histData[asset].length - 1].timestamp :
             0;
-        const index = newData.timestamp - firstTS >= maxTime * 1000 ? 1 : 0;
 
-        histData[asset] = [...histData[asset].slice(index), newData];
-    }
-});
+        // Save historical data
+        if (newData.timestamp - lastTS >= interval * 1000) {
+            const firstTS = histData[asset].length > 0 ?
+                histData[asset][0].timestamp :
+                0;
+            const index = newData.timestamp - firstTS >= maxTime * 1000 ? 1 : 0;
 
-// Close coincap WS on error
-coinCapWs.on('error', () => {
-    console.log('Error.');
-    coinCapWs.close();
-});
-
-// Try to reconnect with an incremental time intervall
-coinCapWs.on('close', () => {
-    console.log('Disconnected.');
-    setTimeout(reconnect, timeout);
-    timeout += timeout;
-});
+            histData[asset] = [...histData[asset].slice(index), newData];
+        }
+    });
+}
 
 // Client connections
 wss.on('connection', ws => {
@@ -108,5 +109,7 @@ wss.on('connection', ws => {
         }
     });
 });
+
+connect();
 
 server.listen(8301);
